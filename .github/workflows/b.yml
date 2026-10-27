@@ -1,0 +1,82 @@
+name: b
+
+on:
+  workflow_dispatch:
+    inputs:
+      q:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: b
+  cancel-in-progress: false
+
+env:
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  claim:
+    if: github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ok: ${{ steps.c.outputs.slot }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: c
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 slot.py claim b --repo "$GITHUB_REPOSITORY" --workflow b.yml --github-output "$GITHUB_OUTPUT"
+
+  scan:
+    needs: claim
+    if: needs.claim.outputs.ok == 'ok' && github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CLAIM_OK: ${{ needs.claim.outputs.ok }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: sb
+          key: sb-${{ github.run_id }}
+          restore-keys: sb-
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: python slot.py restore --repo "$GITHUB_REPOSITORY" --name sb --dir sb --need prev.json --seed data/s1
+      - id: gate
+        env:
+          Q: ${{ inputs.q }}
+        run: |
+          mkdir -p out
+          python pick.py gate-b --words "$Q" --state-dir sb --out out/t.json --info out/g.json --github-output "$GITHUB_OUTPUT"
+      - if: steps.gate.outputs.go == 'true'
+        run: pip install curl_cffi==0.15.0 brotli==1.1.0 beautifulsoup4==4.12.3 lxml==5.3.0
+      - id: scan
+        if: steps.gate.outputs.go == 'true'
+        run: python run.py --targets out/t.json --out out/칸수집.jsonl --max "${{ steps.gate.outputs.limit }}"
+      - if: always() && steps.gate.outputs.go == 'true'
+        run: |
+          touch out/칸수집.jsonl
+          python pick.py record --state-dir sb --scan out/칸수집.jsonl --summary out/sum.json --gate out/g.json \
+            --outcome "${{ steps.scan.outcome }}"
+      - if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: sb
+          key: sb-${{ github.run_id }}
+      - if: always() && steps.gate.outputs.go == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: r-${{ github.run_id }}
+          path: out/
+          retention-days: 14
+          if-no-files-found: warn
