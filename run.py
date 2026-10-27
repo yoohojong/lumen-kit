@@ -102,7 +102,8 @@ def already_done(out_path):
     return done
 
 
-def run(keywords, fetch, read, out_path, is_circuit_open=None, *, limit=MAX_PER_RUN, is_block=None, resume=True):
+def run(keywords, fetch, read, out_path, is_circuit_open=None, *, limit=MAX_PER_RUN, is_block=None, resume=True,
+        brand=None):
     limit = max(0, min(int(limit), MAX_PER_RUN))
     done = failed = blocks = 0
     why = "end"
@@ -116,6 +117,11 @@ def run(keywords, fetch, read, out_path, is_circuit_open=None, *, limit=MAX_PER_
                 html, rows = scan_one(kw, fetch, read)
                 blocks = 0
                 rec.update({"성공": True, "화면길이": len(html), "칸": rows})
+                if brand is not None:
+                    try:
+                        rec["브랜드칸"] = brand(html)
+                    except Exception as e:
+                        rec["브랜드칸"] = {"못읽음": type(e).__name__}
                 if not any(r["종류"] == "cafe" for r in rows) and CAFE_POST.search(html or ""):
                     rec["카페글못읽음"] = True
                 done += 1
@@ -186,6 +192,7 @@ def main(argv=None):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from lib.net import Crawler, CrawlerError, SlowdownController, CircuitBreakerOpen
     from lib import page as P
+    from lib import bc
     from bs4 import BeautifulSoup
 
     require_runner()
@@ -198,7 +205,7 @@ def main(argv=None):
     keywords = list(dict.fromkeys(json.loads(Path(a.targets).read_text(encoding="utf-8"))))
     done, failed, why = run(keywords, make_fetch(crawler, CrawlerError), make_reader(P, BeautifulSoup), Path(a.out),
                             lambda e: isinstance(e, CircuitBreakerOpen), limit=limit,
-                            is_block=lambda e: is_block(e, CrawlerError))
+                            is_block=lambda e: is_block(e, CrawlerError), brand=bc.read_brand_ads)
     print(f"{len(keywords)} / ok {done} / failed {failed} / {why}")
     return exit_code(done, failed, why)
 
