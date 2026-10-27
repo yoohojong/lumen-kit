@@ -17,6 +17,8 @@ WINDOW_DEFAULT, WINDOW_MAX = 2.0, 7.0
 EARLY_MINUTES = 10
 PREV = "prev.json"
 EVENTS_A = ("schedule", "workflow_dispatch")
+SLOTS = ("15 15 * * *", "15 19 * * *", "15 23 * * *", "15 3 * * *", "15 7 * * *", "15 11 * * *")
+SEED_HOURS = 24
 CRON = re.compile(r"^\s*(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*\s*$")
 
 
@@ -55,6 +57,8 @@ def mode_a(env, now):
         return "", f"event {ev or '-'}"
     if not first_try(env):
         return "", f"attempt {env.get('GITHUB_RUN_ATTEMPT')}"
+    if env.get("SLOT_CRON", "") not in SLOTS:
+        return "", f"bad slot '{env.get('SLOT_CRON', '')}'"
     s = slot_time(env.get("SLOT_CRON", ""), now)
     if s is None:
         return "", f"bad slot '{env.get('SLOT_CRON', '')}'"
@@ -250,6 +254,9 @@ def restore(repo, name, dest, need, runner=None, tries=3, seed=None):
     if got == "none" and seed and Path(seed).is_dir() and whole(seed, need):
         shutil.rmtree(dest, ignore_errors=True)
         shutil.copytree(seed, dest)
+        t = _when((load_prev(dest) or {}).get("t"))
+        if t is None or datetime.now(UTC) - t > timedelta(hours=SEED_HOURS):
+            (Path(dest) / PREV).unlink(missing_ok=True)
         return "seed"
     return got
 

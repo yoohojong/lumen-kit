@@ -73,6 +73,13 @@ jobs:
         with:
           path: sb
           key: sb-${{ github.run_id }}
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sb
+          path: sb/
+          retention-days: 90
+          if-no-files-found: ignore
       - if: always() && steps.gate.outputs.go == 'true'
         uses: actions/upload-artifact@v4
         with:
