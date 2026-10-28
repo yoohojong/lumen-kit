@@ -14,7 +14,7 @@ for _s in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-MAX_PER_RUN = 450
+MAX_PER_RUN = 600   # 한 번 상한의 바깥 울타리 — 실제 상한은 slot.hard_cap(a 450 · b 600) · 10-28 450에 걸려 600 회차가 멈춘 일
 STOP_AFTER_BLOCKS = 5
 CAFE_POST = re.compile(r"cafe\.naver\.com/(?:[A-Za-z0-9_-]+/\d+|ca-fe/cafes/\d+/articles/\d+)")
 BLOCK_PREFIXES = ("rate limited", "network error", "unexpected status 403")
