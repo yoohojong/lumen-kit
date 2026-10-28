@@ -12,7 +12,7 @@ from pathlib import Path
 KST = timezone(timedelta(hours=9))
 UTC = timezone.utc
 A_RUN, A_SMALL = 450, 30
-B_RUN, B_SMALL, B_PER_DAY = 200, 30, 4
+B_RUN, B_SMALL, B_PER_DAY = 400, 30, 8
 WINDOW_DEFAULT, WINDOW_MAX = 2.0, 7.0
 EARLY_MINUTES = 10
 PREV = "prev.json"
