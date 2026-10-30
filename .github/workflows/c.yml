@@ -1,0 +1,44 @@
+name: c
+
+on:
+  push:
+    branches: [t1030]
+  workflow_dispatch:
+    inputs:
+      deadline_min:
+        required: false
+        default: '50'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: c
+  cancel-in-progress: false
+
+jobs:
+  p:
+    if: github.event_name == 'workflow_dispatch' && github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    env:
+      PYTHONIOENCODING: utf-8
+      GOYU_NOTIFY_OFF: '1'
+      DEADLINE_MIN: ${{ inputs.deadline_min }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install curl_cffi==0.15.0
+      - run: mkdir -p out && (curl -s --max-time 10 https://ipinfo.io/json > out/ip0.json || true) && cat out/ip0.json
+      - run: python p.py --out out --deadline-min "$DEADLINE_MIN"
+      - if: always()
+        run: (curl -s --max-time 10 https://ipinfo.io/json > out/ip1.json || true) && cat out/ip1.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p-${{ github.run_id }}
+          path: out/
+          retention-days: 14
+          if-no-files-found: warn
