@@ -12,7 +12,7 @@ from pathlib import Path
 KST = timezone(timedelta(hours=9))
 UTC = timezone.utc
 A_RUN, A_SMALL = 450, 30
-B_RUN, B_SMALL, B_PER_DAY = 600, 30, 12
+B_RUN, B_SMALL, B_PER_DAY = 600, 30, None
 WINDOW_DEFAULT, WINDOW_MAX = 2.0, 7.0
 EARLY_MINUTES = 10
 PREV = "prev.json"
@@ -150,7 +150,7 @@ def claim_b(env, now, runner, repo, workflow):
     if seen is None or mine is None:
         return "", f"{why} - run list unread", True
     before = sum(1 for t, i in seen if i != me and (t, i) < (mine, me))
-    if before >= B_PER_DAY:
+    if B_PER_DAY is not None and before >= B_PER_DAY:
         return "", f"{why} - {before} runs today", False
     return "ok", f"{why} #{before + 1} today", False
 
