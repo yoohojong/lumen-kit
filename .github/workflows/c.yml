@@ -1,0 +1,117 @@
+name: c
+
+# 여러 서버가 몫을 나눠 동시에 잰다. b.yml(요청 1대)과 슬롯 · 동시 묶음을 같이 쓰지 않는다.
+# 끄기: 이 파일을 지우거나 Actions 화면에서 이 설정만 비활성화(b · a 는 그대로).
+on:
+  workflow_dispatch:
+    inputs:
+      q:
+        description: 검색어 목록(JSON 문자열 배열)
+        required: true
+        type: string
+      n:
+        description: 서버 수(최대 15)
+        required: false
+        default: '5'
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: c-batch
+  cancel-in-progress: false
+
+env:
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  plan:
+    if: github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.p.outputs.go }}
+      idx: ${{ steps.p.outputs.idx }}
+    steps:
+      - id: p
+        env:
+          Q: ${{ inputs.q }}
+          N: ${{ inputs.n }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          MAX_N, PER_MAX = 15, 450
+          try:
+              got = json.loads(os.environ.get("Q", ""))
+          except ValueError:
+              got = []
+          seen, words = set(), []
+          for w in got if isinstance(got, list) else []:
+              if isinstance(w, str):
+                  k = "".join(w.split())
+                  if k and k not in seen:
+                      seen.add(k)
+                      words.append(w.strip())
+          try:
+              n = int(os.environ.get("N") or 5)
+          except ValueError:
+              n = 5
+          n = max(1, min(n, MAX_N, len(words) or 1))
+          if len(words) > n * PER_MAX:
+              print(f"too many words: {len(words)} > {n}*{PER_MAX}", file=sys.stderr)
+              sys.exit(1)
+          os.makedirs("plan", exist_ok=True)
+          shards = [words[i::n] for i in range(n)]
+          for i, s in enumerate(shards):
+              with open(f"plan/t{i}.json", "w", encoding="utf-8") as f:
+                  json.dump(s, f, ensure_ascii=False)
+          with open("plan/plan.json", "w", encoding="utf-8") as f:
+              json.dump({"n": n, "total": len(words), "sizes": [len(s) for s in shards]}, f)
+          go = "true" if words else "false"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"go={go}\nidx={json.dumps(list(range(n)) if words else [])}\n")
+          print(f"go={go} words={len(words)} n={n} sizes={[len(s) for s in shards]}")
+          PY
+      - if: steps.p.outputs.go == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: p-${{ github.run_id }}
+          path: plan/
+          retention-days: 14
+          if-no-files-found: error
+
+  scan:
+    needs: plan
+    if: needs.plan.outputs.go == 'true' && github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 15
+      matrix:
+        i: ${{ fromJSON(needs.plan.outputs.idx) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: p-${{ github.run_id }}
+          path: plan
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install curl_cffi==0.15.0 brotli==1.1.0 beautifulsoup4==4.12.3 lxml==5.3.0
+      - id: scan
+        run: |
+          mkdir -p out
+          python run.py --targets "plan/t${{ matrix.i }}.json" --out out/칸수집.jsonl --max 450
+      - if: always()
+        run: touch out/칸수집.jsonl
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r-${{ github.run_id }}-${{ matrix.i }}
+          path: out/
+          retention-days: 14
+          if-no-files-found: warn
