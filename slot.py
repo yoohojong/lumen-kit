@@ -143,6 +143,8 @@ def claim_b(env, now, runner, repo, workflow):
     ok, why = mode_b(env)
     if not ok:
         return "", why, False
+    if B_PER_DAY is None:
+        return "ok", why, False
     day = now.astimezone(KST).replace(hour=0, minute=0, second=0, microsecond=0)
     seen = _runs(runner, repo, workflow, day.astimezone(UTC), ("workflow_dispatch",))
     me = int(env["GITHUB_RUN_ID"]) if str(env.get("GITHUB_RUN_ID") or "").isdigit() else None
